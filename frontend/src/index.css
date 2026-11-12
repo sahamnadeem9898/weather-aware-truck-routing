@@ -1620,7 +1620,27 @@ input[type='range']:active::-webkit-slider-thumb {
 /* --- Things drawn on the map ---------------------------------------------- */
 /* MapLibre positions markers with `transform`; animate children, not the root. */
 
+/* The marker element carries only MapLibre's positioning transform. The look,
+   and anything that scales, goes on the face inside it: scaling the marker
+   itself would scale its position too and send it jumping across the map. */
 .route-badge {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.route-badge,
+.route-badge:active {
+  scale: none !important;
+}
+
+.route-badge[data-selected='true'] {
+  z-index: 2;
+}
+
+.route-badge__face {
+  position: relative;
   display: grid;
   place-items: center;
   width: 28px;
@@ -1634,22 +1654,28 @@ input[type='range']:active::-webkit-slider-thumb {
   border: 1.5px solid var(--line-strong);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transition:
+    scale 0.18s cubic-bezier(0.3, 1.5, 0.5, 1),
     background 0.2s,
-    color 0.2s;
+    color 0.2s,
+    border-color 0.2s;
 }
 
-.route-badge:hover {
+.route-badge:hover .route-badge__face {
   border-color: var(--text);
+  scale: 1.12;
 }
 
-.route-badge[data-selected='true'] {
+.route-badge:active .route-badge__face {
+  scale: 0.94;
+}
+
+.route-badge[data-selected='true'] .route-badge__face {
   color: var(--on-primary);
   background: var(--primary);
   border-color: var(--primary);
-  z-index: 2;
 }
 
-.route-badge[data-best='true']::after {
+.route-badge[data-best='true'] .route-badge__face::after {
   content: '★';
   position: absolute;
   top: -9px;
@@ -2505,17 +2531,14 @@ input[type='range'].load__range:active::-webkit-slider-thumb {
   cursor: progress;
 }
 
-.route-badge[data-closed='true'] {
+.route-badge[data-closed='true'] .route-badge__face {
   color: var(--risk-4-text);
   border-color: var(--risk-4);
   border-style: dashed;
-}
-
-.route-badge[data-closed='true'] span {
   text-decoration: line-through;
 }
 
-.route-badge[data-closed='true'][data-selected='true'] {
+.route-badge[data-closed='true'][data-selected='true'] .route-badge__face {
   color: #ffffff;
   background: var(--risk-4);
   border-style: solid;
@@ -2567,8 +2590,8 @@ input[type='range'].load__range:active::-webkit-slider-thumb {
 }
 
 /* --- Micro-interactions ---------------------------------------------------- */
-/* `scale` and `translate` are separate from `transform`, so they are safe on
-   map markers, whose `transform` MapLibre controls. */
+/* Never put `scale` on a map marker's own element (see .route-badge): CSS
+   applies it on top of MapLibre's positioning transform. */
 
 button {
   transition: scale 0.12s ease-out;
@@ -2581,17 +2604,6 @@ button:active:not(:disabled) {
 .cta:active:not(:disabled),
 .segmented button:active:not(:disabled) {
   scale: 0.985;
-}
-
-.route-badge {
-  transition:
-    scale 0.18s cubic-bezier(0.3, 1.5, 0.5, 1),
-    background 0.2s,
-    color 0.2s;
-}
-
-.route-badge:hover {
-  scale: 1.12;
 }
 
 .scrub__arrivals button {

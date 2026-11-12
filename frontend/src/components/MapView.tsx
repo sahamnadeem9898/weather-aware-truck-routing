@@ -258,9 +258,11 @@ function MapView(props: Props) {
       el.dataset.selected = String(route.id === selectedId)
       el.dataset.best = String(route.id === plan.recommendation.route_id)
       el.dataset.closed = String(route.has_no_travel)
-      // The letter sits in a child so hover/press can scale it: MapLibre owns
-      // the transform on the marker element itself.
+      // MapLibre positions the marker element with a CSS transform, so the
+      // badge's look and its hover/press scaling live on a child instead:
+      // scaling the marker itself would also scale its position on the map.
       const face = document.createElement('span')
+      face.className = 'route-badge__face'
       face.textContent = route.id
       el.append(face)
       el.setAttribute(
