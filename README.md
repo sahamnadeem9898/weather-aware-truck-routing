@@ -52,7 +52,25 @@ setup.
 
 1. Push the repo to GitHub.
 2. In Render: **New → Blueprint**, pick the repo, **Apply**.
-3. Open the service URL when the build finishes.
+3. Set up the weather proxy below, then open the service URL.
+
+### Weather proxy (needed on Render)
+
+Open-Meteo's free tier is limited per IP address, and Render shares its
+outbound IP addresses between many customers, so other people's apps can use
+up the quota first (Open-Meteo's terms warn about exactly this for Render,
+Vercel and Netlify). Requests that come through a Cloudflare Worker are limited
+per Cloudflare account instead, which is the fix Open-Meteo recommends.
+
+1. In a free Cloudflare account: **Workers & Pages → Create → Hello World**,
+   then **Edit code**, paste [`deploy/open-meteo-worker.js`](deploy/open-meteo-worker.js)
+   and **Deploy**.
+2. In the Render service's **Environment**, set both `OPEN_METEO_URL` and
+   `OPEN_METEO_GEOCODING_URL` to the Worker's URL (for example
+   `https://open-meteo-proxy.<account>.workers.dev`).
+
+The Worker forwards only the forecast and place-search endpoints and caches
+successful responses for 15 minutes. Locally, no proxy is needed.
 
 ### Running on Render's free tier
 
@@ -66,10 +84,10 @@ app is set up for that:
 - **CPU.** A new 800-mile trip needs about half a second of CPU; re-planning
   the same trip (another load or checkpoint interval) comes from cache.
 - **Weather quota.** Open-Meteo's free tier counts every location as a call
-  (600 a minute, 5,000 an hour, 10,000 a day) and a plan uses 150–500. Each
-  batch is cached as soon as it arrives, so a retry only asks for what is
-  missing. If the per-minute limit is hit, the UI counts down and retries once
-  on its own.
+  (600 a minute, 5,000 an hour, 10,000 a day) and a plan uses 150–500. The
+  weather proxy above keeps that quota to this app alone. Each batch is cached
+  as soon as it arrives, so a retry only asks for what is missing. If the
+  per-minute limit is hit, the UI counts down and retries once on its own.
 - **Abuse.** At most 12 plans a minute per client and 30 a minute overall.
 - **Health check.** `/api/health/` answers before host validation, so Render's
   internal health checks pass.
@@ -244,5 +262,6 @@ frontend/
     components/           MapView, TripFormPanel, RouteCard, CheckpointList, TimelineDock, …
     lib/                  geometry, formatting, risk scale
     index.css             theme tokens (light + dark); the map reads its colours from these
+deploy/open-meteo-worker.js  Cloudflare Worker for the weather quota (see Deploy)
 Dockerfile, render.yaml   single-service deploy
 ```

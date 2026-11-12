@@ -48,10 +48,16 @@ export default function App() {
   const lastRequest = useRef<TripForm | null>(null)
   const errorBox = useRef<HTMLDivElement>(null)
 
-  // The error sits under the form; bring it into view so it can't be missed.
-  useEffect(() => {
-    if (error) errorBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [error])
+  // The error sits under the form. Once it has opened, scroll the form, and
+  // only the form, so it can't be missed. (scrollIntoView would also scroll
+  // the panel itself and push its header out of view.)
+  const revealError = useCallback(() => {
+    const box = errorBox.current
+    const scroller = box?.closest<HTMLElement>('.panel__scroll')
+    if (!box || !scroller) return
+    const hidden = box.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom
+    if (hidden > 0) scroller.scrollBy({ top: hidden + 16, behavior: 'smooth' })
+  }, [])
 
   const submit = useCallback(async (values: TripForm, isAutoRetry = false) => {
     request.current?.abort()
@@ -303,6 +309,7 @@ export default function App() {
                 animate={{ opacity: 1, height: 'auto', x: [0, -6, 6, -4, 4, 0] }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ x: { duration: 0.4, delay: 0.1 } }}
+                onAnimationComplete={revealError}
               >
                 <div>
                   <strong>Couldn’t plan that trip</strong>

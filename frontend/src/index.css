@@ -258,7 +258,7 @@ dd,
   width: var(--panel-w);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: clip;
   z-index: 3;
   animation: panel-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -832,7 +832,7 @@ input[type='range']:active::-webkit-slider-thumb {
 }
 
 .error {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .error > div {
@@ -1903,7 +1903,7 @@ input[type='range']:active::-webkit-slider-thumb {
 }
 
 .dtp__panel {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .dtp__card {
@@ -2410,7 +2410,7 @@ input[type='range'].load__range:active::-webkit-slider-thumb {
 }
 
 .closed {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .closed p {

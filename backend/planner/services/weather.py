@@ -204,10 +204,10 @@ def _open_meteo(params: dict, timeout: float = 25.0):
                     "Wait a minute and try again.",
                     retry_after=MINUTE_LIMIT_RETRY_SECONDS,
                 ) from exc
+            window = "daily" if "daily" in str(exc).lower() else "hourly"
             raise RateLimited(
                 "weather",
-                "The free weather service's hourly or daily limit has been reached. "
-                "Try again later.",
+                f"The free weather service's {window} limit has been reached. Try again later.",
             ) from exc
         if exc.http_status == 400:
             raise UpstreamError(
