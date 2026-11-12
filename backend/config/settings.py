@@ -7,6 +7,7 @@ comes from third-party APIs and is held in the in-process cache.
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BASE_DIR.parent
@@ -18,6 +19,20 @@ def env_bool(name: str, default: bool) -> bool:
 
 def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
+
+
+def env_url(name: str, default: str) -> str:
+    """A service base URL, forgiving about spaces, a trailing slash or a missing scheme."""
+    value = os.environ.get(name, "").strip().rstrip("/")
+    if not value:
+        return default
+    return value if "://" in value else f"https://{value}"
+
+
+def env_origin(name: str, default: str) -> str:
+    """Only scheme://host of a URL setting, so pasting a full test link still works."""
+    parts = urlsplit(env_url(name, default))
+    return f"{parts.scheme}://{parts.netloc}" if parts.netloc else default
 
 
 DEBUG = env_bool("DJANGO_DEBUG", False)
@@ -109,13 +124,15 @@ LOGGING = {
 }
 
 # --- Third-party services (all free and keyless) ---------------------------
-VALHALLA_URL = os.environ.get("VALHALLA_URL", "https://valhalla1.openstreetmap.de")
-OSRM_URL = os.environ.get("OSRM_URL", "https://router.project-osrm.org")
-OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com")
-OPEN_METEO_GEOCODING_URL = os.environ.get(
+VALHALLA_URL = env_url("VALHALLA_URL", "https://valhalla1.openstreetmap.de")
+OSRM_URL = env_url("OSRM_URL", "https://router.project-osrm.org")
+# Open-Meteo, or the Cloudflare Worker in deploy/ that forwards to it. Both
+# serve /v1/forecast and /v1/search from the root, so only the origin is kept.
+OPEN_METEO_URL = env_origin("OPEN_METEO_URL", "https://api.open-meteo.com")
+OPEN_METEO_GEOCODING_URL = env_origin(
     "OPEN_METEO_GEOCODING_URL", "https://geocoding-api.open-meteo.com"
 )
-NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org")
+NOMINATIM_URL = env_url("NOMINATIM_URL", "https://nominatim.openstreetmap.org")
 HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "stormline-truck-routing-demo/1.0")
 
 # --- Planner tuning --------------------------------------------------------
