@@ -4,7 +4,7 @@ A React + Django app that helps a truck driver pick the safest of three routes,
 based on the wind, rain and snow the truck will meet **at the hour it reaches
 each point**, the load weight, and travel time.
 
-- **Live app:** _add the Render URL here_
+- **Live app:** https://stormline-z3hi.onrender.com (free tier: the first visit after a quiet spell takes about a minute to wake up)
 - **Walkthrough:** _add the Loom link here_
 
 ## What it does
