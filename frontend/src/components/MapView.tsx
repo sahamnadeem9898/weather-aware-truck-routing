@@ -224,6 +224,20 @@ function MapView(props: Props) {
     }
   }, [plan, tracks, ready])
 
+  // --- Keep basemap labels clear of the endpoint pins (also after a theme swap)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    const points: Feature[] = plan
+      ? [plan.origin, plan.destination].map((place) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [place.lon, place.lat] },
+          properties: {},
+        }))
+      : []
+    setSource(map, 'endpoints', { type: 'FeatureCollection', features: points })
+  }, [plan, ready, styleEpoch])
+
   // --- Selection changes: restyle without replaying the animation ----------
   useEffect(() => {
     const map = mapRef.current
@@ -372,7 +386,7 @@ function addLayers(map: MapLibreMap) {
   const palette = riskPalette()
   const levelColor = levelColorExpression(palette)
   const casing = cssVar('--map-casing')
-  for (const id of ['heat', 'routes', 'flow', 'checkpoints']) {
+  for (const id of ['heat', 'routes', 'flow', 'checkpoints', 'endpoints']) {
     map.addSource(id, { type: 'geojson', data: EMPTY })
   }
   // The heatmap goes under the basemap's labels so place names stay readable.
@@ -455,7 +469,22 @@ function addLayers(map: MapLibreMap) {
       'circle-stroke-opacity': ['case', selected, 1, 0.6],
     },
   })
+  // An invisible box over each trip endpoint. Being the top symbol layer, it
+  // is placed first, so the basemap leaves out its own place names there
+  // instead of drawing them half-hidden under the origin and destination pins.
+  if (!map.hasImage(LABEL_BLOCKER.id)) {
+    const { id, width, height } = LABEL_BLOCKER
+    map.addImage(id, { width, height, data: new Uint8Array(width * height * 4) })
+  }
+  map.addLayer({
+    id: 'endpoint-label-blocker',
+    type: 'symbol',
+    source: 'endpoints',
+    layout: { 'icon-image': LABEL_BLOCKER.id, 'icon-allow-overlap': true },
+  })
 }
+
+const LABEL_BLOCKER = { id: 'label-blocker', width: 120, height: 56 }
 
 /** Routes as level-coloured segments, revealed up to `progress` (0..1). */
 function drawRoutes(

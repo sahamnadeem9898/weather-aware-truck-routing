@@ -126,7 +126,7 @@ export default function TimelineDock(props: Props) {
               type="button"
               data-selected={id === selectedId}
               data-stopped={stopped}
-              style={{ left: `${left}%` }}
+              style={{ left }}
               title={
                 stopped
                   ? `Route ${id} has to stop here: No Travel ahead. Click to jump there.`
@@ -170,32 +170,38 @@ export default function TimelineDock(props: Props) {
   )
 }
 
-const MIN_MARK_GAP = 4 // percent of the track, so arrival badges never overlap
+// Pixels between arrival badge centres: a 17 px badge, room for its hover zoom.
+const MIN_MARK_GAP_PX = 21
 
 interface Mark {
   id: string
-  left: number
+  /** CSS `left`: the badge's own spot on the track, or just right of its neighbour. */
+  left: string
   hour: number
   stopped: boolean
 }
 
 /**
  * One badge per route on the track: where it arrives, or, for a closed route,
- * where the truck has to stop. Badges are nudged apart if they collide.
+ * where the truck has to stop. Badges that would collide are nudged right.
+ * The gap is in pixels, so it holds on a phone-width track too: badge i sits
+ * at max over j <= i of (share_j + (i - j) * gap), which CSS max() computes.
  */
 function arrivalMarks(plan: Plan, maxHours: number): Mark[] {
-  const marks = plan.routes
+  const spots = plan.routes
     .map((route) => {
       const stop = stopPoint(route)
       const hour = stop ? stop.hour : route.duration_s / 3600
-      return { id: route.id, hour, left: (hour / maxHours) * 100, stopped: stop !== null }
+      return { id: route.id, hour, share: (hour / maxHours) * 100, stopped: stop !== null }
     })
-    .filter((mark) => mark.hour <= maxHours)
-    .sort((a, b) => a.left - b.left)
-  for (let i = 1; i < marks.length; i++) {
-    marks[i].left = Math.max(marks[i].left, marks[i - 1].left + MIN_MARK_GAP)
-  }
-  return marks
+    .filter((spot) => spot.hour <= maxHours)
+    .sort((a, b) => a.share - b.share)
+  return spots.map(({ id, hour, stopped }, i) => {
+    const options = spots
+      .slice(0, i + 1)
+      .map((spot, j) => `calc(${spot.share.toFixed(2)}% + ${(i - j) * MIN_MARK_GAP_PX}px)`)
+    return { id, hour, stopped, left: `max(${options.join(', ')})` }
+  })
 }
 
 function Legend({ mode, simulated }: { mode: HeatMode; simulated: boolean }) {

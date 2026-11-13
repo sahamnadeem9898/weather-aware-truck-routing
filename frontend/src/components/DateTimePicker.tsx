@@ -87,6 +87,18 @@ export default function DateTimePicker({ id, value, onChange }: Props) {
     setView({ year: at.getFullYear(), month: at.getMonth() })
   }
 
+  // Once open, scroll the form (and only the form; see App's revealError) so
+  // the whole picker is in view, without pushing its own field off the top.
+  const reveal = () => {
+    const picker = root.current
+    const scroller = picker?.closest<HTMLElement>('.panel__scroll')
+    if (!picker || !scroller || picker.dataset.open !== 'true') return
+    const box = picker.getBoundingClientRect()
+    const view = scroller.getBoundingClientRect()
+    const by = Math.min(box.bottom - view.bottom + 12, box.top - view.top - 8)
+    if (by > 0) scroller.scrollBy({ top: by, behavior: 'smooth' })
+  }
+
   // Close on outside click or Escape.
   useEffect(() => {
     if (!open) return
@@ -140,6 +152,7 @@ export default function DateTimePicker({ id, value, onChange }: Props) {
           <motion.div
             id={panelId}
             className="dtp__panel"
+            onAnimationComplete={reveal}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

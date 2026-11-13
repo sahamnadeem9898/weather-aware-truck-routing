@@ -15,6 +15,12 @@ import { useTheme } from './hooks/useTheme'
 import { formatDayTime, formatLoad, nextHourLocal, zoneAbbreviation } from './lib/format'
 import type { CheckpointRef, HeatMode, Plan, TripForm } from './types'
 
+// Mirrors index.css: the dock spans the gap between the side panels and, below
+// this width, wraps onto more rows (the `@container dock` rule).
+const DOCK_SIDE_SPACE = 420 + 16 * 2
+const RIGHT_PANEL_SPACE = 360 + 16 * 2
+const DOCK_WRAPS_BELOW = 540
+
 const INITIAL_FORM: TripForm = {
   origin: { text: '' },
   destination: { text: '' },
@@ -47,6 +53,7 @@ export default function App() {
   const [retryIn, setRetryIn] = useState<number | null>(null)
   const lastRequest = useRef<TripForm | null>(null)
   const errorBox = useRef<HTMLDivElement>(null)
+  const panelScroll = useRef<HTMLDivElement>(null)
 
   // The error sits under the form. Once it has opened, scroll the form, and
   // only the form, so it can't be missed. (scrollIntoView would also scroll
@@ -71,6 +78,8 @@ export default function App() {
     try {
       const result = await planTrip(values, controller.signal)
       setPlan(result)
+      // The form may have been scrolled to reach the button; results start at the verdict.
+      panelScroll.current?.scrollTo({ top: 0 })
       // With no safe route there is no pick; show the least bad one for inspection.
       const leastBad = result.routes.find((route) => route.rank === 1)
       setSelectedId(result.recommendation.route_id ?? leastBad?.id ?? null)
@@ -148,13 +157,17 @@ export default function App() {
   )
 
   // Space the floating panels take, so the map frames routes in what's left.
-  const padding = useMemo(
-    () =>
-      compact
-        ? { top: 150, bottom: Math.round(window.innerHeight * 0.5) + 30, left: 40, right: 40 }
-        : { top: 70, bottom: 230, left: 470, right: wide ? 410 : 60 },
-    [compact, wide],
-  )
+  // On phones the timeline sits on top and the panel fills the bottom half;
+  // the top padding also clears the place-name chip drawn above an endpoint.
+  const padding = useMemo(() => {
+    if (compact) {
+      return { top: 250, bottom: Math.round(window.innerHeight * 0.5) + 30, left: 70, right: 70 }
+    }
+    const dockWidth = window.innerWidth - DOCK_SIDE_SPACE - (wide ? RIGHT_PANEL_SPACE : 16)
+    const dockWraps = dockWidth < DOCK_WRAPS_BELOW
+    // The extra ~50 px each side keeps the place-name chips over the endpoints in view.
+    return { top: 70, bottom: dockWraps ? 290 : 230, left: 520, right: wide ? 460 : 110 }
+  }, [compact, wide])
 
   return (
     <div className="app" data-has-plan={plan !== null}>
@@ -254,7 +267,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="panel__scroll">
+        <div className="panel__scroll" ref={panelScroll}>
           <AnimatePresence mode="popLayout" initial={false}>
             {editing || !plan ? (
               <motion.div
