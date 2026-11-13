@@ -1,5 +1,7 @@
 """Orchestrates one trip plan: routes -> checkpoints -> weather -> risk -> ranking."""
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,6 +14,8 @@ from .errors import InvalidTrip
 from .geo import simplify
 from .geocoding import Place
 from .risk import Assessment, assess
+
+logger = logging.getLogger(__name__)
 
 MAX_PAST = timedelta(hours=24)
 MAX_AHEAD = timedelta(days=12)
@@ -37,6 +41,7 @@ class TripRequest:
 def plan_trip(trip: TripRequest, now: datetime | None = None) -> dict:
     """Everything the map needs for one trip, as a JSON-ready dict."""
     now = now or datetime.now(UTC)
+    started = time.perf_counter()
     zone = _zone(weather.timezone_name(trip.origin.lat, trip.origin.lon))
     departure = _to_utc(trip.departure_local, zone)
     if departure < now - MAX_PAST:
@@ -44,9 +49,11 @@ def plan_trip(trip: TripRequest, now: datetime | None = None) -> dict:
     if departure > now + MAX_AHEAD:
         raise InvalidTrip("Forecasts only reach about two weeks out. Depart within 12 days.")
 
+    routing_started = time.perf_counter()
     routes = routing.find_routes(
         (trip.origin.lon, trip.origin.lat), (trip.destination.lon, trip.destination.lat)
     )
+    routing_s = time.perf_counter() - routing_started
     checkpoints = [build_checkpoints(route, trip.interval_mi) for route in routes]
     grid, grid_step = heatmap.corridor_grid([route.coords for route in routes])
 
@@ -61,11 +68,13 @@ def plan_trip(trip: TripRequest, now: datetime | None = None) -> dict:
     # Enough forecast for the 48 h heatmap and for testing delayed departures.
     longest = max(route.duration_s for route in routes)
     horizon = max(heatmap.HEATMAP_HOURS, delay.MAX_WAIT_HOURS) * 3600 + longest
+    weather_started = time.perf_counter()
     forecast = weather.load_forecast(
         cells,
         start=departure - timedelta(hours=1),
         end=departure + timedelta(seconds=horizon) + timedelta(hours=1),
     )
+    weather_s = time.perf_counter() - weather_started
 
     if trip.simulate_storm:
         anchor = _to_utc(trip.storm_anchor_local or trip.departure_local, zone)
@@ -102,6 +111,18 @@ def plan_trip(trip: TripRequest, now: datetime | None = None) -> dict:
         default=None,
     )
 
+    heat = heatmap.build_frames(grid, forecast, departure, trip.load_lb)
+    # Where the time went, for the server log (third-party calls dominate).
+    logger.info(
+        "Planned %d routes (%s), %d weather locations in %.1f s: routing %.1f s, weather %.1f s",
+        len(routes),
+        routes[0].provider,
+        len(cells),
+        time.perf_counter() - started,
+        routing_s,
+        weather_s,
+    )
+
     return {
         "origin": _place(trip.origin),
         "destination": _place(trip.destination),
@@ -128,7 +149,7 @@ def plan_trip(trip: TripRequest, now: datetime | None = None) -> dict:
             "points": grid,
             "step_deg": grid_step,
             "hours": heatmap.HEATMAP_HOURS,
-            **heatmap.build_frames(grid, forecast, departure, trip.load_lb),
+            **heat,
         },
     }
 

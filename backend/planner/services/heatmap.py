@@ -14,7 +14,9 @@ from .weather import Forecast
 
 HEATMAP_HOURS = 48
 CORRIDOR_HALF_WIDTH_MI = 40.0
-MAX_POINTS = 240
+# Open-Meteo's free tier counts every location as a call (600 a minute), so
+# the grid is kept small enough for several new trips a minute.
+MAX_POINTS = 120
 # Longitude spacing options, finest first; the first that fits MAX_POINTS wins.
 STEP_OPTIONS_DEG = [0.2, 0.25, 0.3, 0.4, 0.5, 0.65, 0.8, 1.0, 1.3, 1.7, 2.2, 3.0]
 

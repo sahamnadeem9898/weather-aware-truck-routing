@@ -95,7 +95,7 @@ app is set up for that:
 - **CPU.** A new 800-mile trip needs about half a second of CPU; re-planning
   the same trip (another load or checkpoint interval) comes from cache.
 - **Weather quota.** Open-Meteo's free tier counts every location as a call
-  (600 a minute, 5,000 an hour, 10,000 a day) and a plan uses 150–500. The
+  (600 a minute, 5,000 an hour, 10,000 a day) and a plan uses about 100–250. The
   weather proxy above keeps that quota to this app alone. Each batch is cached
   as soon as it arrives, so a retry only asks for what is missing. If the
   per-minute limit is hit, the UI counts down and retries once on its own.
@@ -159,7 +159,7 @@ The UI shows the message as written.
 - **Blended frames.** The slider moves in quarter hours; the browser blends the
   two forecast hours on either side, so the heatmap changes continuously.
 - **GPU layers.** Routes, checkpoints and the heatmap are MapLibre layers drawn
-  by WebGL, not DOM elements. A slider step updates about 240 heatmap points.
+  by WebGL, not DOM elements. A slider step updates at most 120 heatmap points.
 - **Small geometry.** Route lines are simplified on the server (40 m
   tolerance), cutting ~10,000 points per route to about 1,000 with no visible
   change.
@@ -202,7 +202,7 @@ Where the brief leaves room, this is what the code does:
 | **Rain** | Open-Meteo `rain` + `showers` (large-scale plus convective), in inches for the hour. |
 | **Units** | The weather API is asked for mph and inches directly, so nothing is converted in code. |
 | **Times** | Departure is local time at the origin; all times are shown in the origin's timezone. |
-| **Heatmap** | A grid of up to 240 points within 40 miles of any route. Hour 0 is departure. The "Risk" layer includes the load rules; Wind, Rain and Snow show the raw forecast on the same colour scale. |
+| **Heatmap** | A grid of up to 120 points within 40 miles of any route. Hour 0 is departure. The "Risk" layer includes the load rules; Wind, Rain and Snow show the raw forecast on the same colour scale. |
 
 ## API choices
 
