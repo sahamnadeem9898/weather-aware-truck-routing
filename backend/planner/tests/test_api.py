@@ -255,6 +255,13 @@ class ErrorApiTests(SimpleTestCase):
         self.assertEqual(response.json()["retry_after"], 60)
         self.assertEqual(response["Retry-After"], "60")
 
+    def test_a_brief_outage_tells_the_client_to_retry_soon(self):
+        error = UpstreamError("weather", "Not responding.", http_status=525, retry_after=5)
+        response = self.post_with(find_routes=lambda *a: (_ for _ in ()).throw(error))
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["retry_after"], 5)
+        self.assertEqual(response["Retry-After"], "5")
+
     def test_health_check_answers_whatever_the_host(self):
         response = self.client.get("/api/health/", HTTP_HOST="10.0.0.5:10000")
         self.assertEqual(response.status_code, 200)

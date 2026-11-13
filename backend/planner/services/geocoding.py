@@ -14,7 +14,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from .errors import PlaceNotFound, UpstreamError
-from .http import request_json
+from .http import request_json, request_json_failover
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,8 @@ class Place:
 
 
 MAX_QUERY_LENGTH = 200
+# When every geocoder fails, the app tries again on its own after this long.
+RETRY_SECONDS = 5
 
 
 def suggest(query: str, limit: int = 6) -> list[Place]:
@@ -34,12 +36,12 @@ def suggest(query: str, limit: int = 6) -> list[Place]:
         return []
     key = _key("suggest", f"{query}:{limit}")
     if (places := cache.get(key)) is None:
-        data = request_json(
+        data = request_json_failover(
             "geocoding",
-            "GET",
-            f"{settings.OPEN_METEO_GEOCODING_URL}/v1/search",
+            (settings.OPEN_METEO_GEOCODING_URL, settings.OPEN_METEO_GEOCODING_PUBLIC_URL),
+            "/v1/search",
             params={"name": query, "count": limit, "language": "en", "format": "json"},
-            timeout=8.0,
+            timeout=(5.0, 8.0),
         )
         places = [_open_meteo_place(item) for item in data.get("results", [])]
         cache.set(key, places, settings.GEOCODE_CACHE_SECONDS)
@@ -67,7 +69,9 @@ def resolve(text: str) -> Place:
     if place is None:
         if failures == len(lookups):
             raise UpstreamError(
-                "geocoding", "Place search is unavailable right now. Try again shortly."
+                "geocoding",
+                "Place search is unavailable right now. Try again shortly.",
+                retry_after=RETRY_SECONDS,
             )
         raise PlaceNotFound(f'Could not find "{text}". Check the spelling or pick a suggestion.')
 

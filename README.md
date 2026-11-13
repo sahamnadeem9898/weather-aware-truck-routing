@@ -69,8 +69,19 @@ per Cloudflare account instead, which is the fix Open-Meteo recommends.
    `OPEN_METEO_GEOCODING_URL` to the Worker's URL (for example
    `https://open-meteo-proxy.<account>.workers.dev`).
 
-The Worker forwards only the forecast and place-search endpoints and caches
-successful responses for 15 minutes. Locally, no proxy is needed.
+The Worker forwards only the forecast and place-search endpoints and gives a
+failed upstream call one more try. If the Worker itself has trouble, the server
+falls back to calling Open-Meteo directly (see below). Locally, no proxy is
+needed.
+
+**Keeping the free instance awake (optional).** Render's free plan stops a
+service after 15 minutes without traffic, and the next visitor waits about a
+minute while it starts again. The same Worker can prevent that: in its
+**Settings**, add a variable `KEEP_WARM_URL` set to
+`https://<your-service>.onrender.com/api/health/`, and a **Cron Trigger** that
+runs every 10 minutes. An always-on free service uses about 730 of the 750
+free instance hours Render gives each workspace per month, so do this only for
+one free service.
 
 ### Running on Render's free tier
 
@@ -88,10 +99,17 @@ app is set up for that:
   weather proxy above keeps that quota to this app alone. Each batch is cached
   as soon as it arrives, so a retry only asks for what is missing. If the
   per-minute limit is hit, the UI counts down and retries once on its own.
+- **Flaky networks.** Every Open-Meteo call has a 5-second connect timeout.
+  A dropped connection or a 5xx from the Worker is retried against Open-Meteo
+  directly, and the Worker is then tried last for two minutes, so one bad path
+  never stalls a plan. If both paths fail, the API returns `retry_after: 5` and
+  the app retries once without showing an error. Rate limits (429) are never
+  routed around.
 - **Abuse.** At most 12 plans a minute per client and 30 a minute overall.
 - **Health check.** `/api/health/` answers before host validation, so Render's
   internal health checks pass.
-- **Cold start.** After a sleep, the first request takes about a minute.
+- **Cold start.** After a sleep, the first request takes about a minute,
+  unless the Worker's keep-awake ping above is on.
 
 ## Architecture
 
@@ -126,7 +144,7 @@ Errors always look like `{"code": "...", "detail": "readable message"}`:
 | `invalid_input`, `invalid_trip` | 400, 422 | Bad field, or a departure outside the forecast window |
 | `place_not_found` | 422 | Neither geocoder knows the address |
 | `no_route` | 422 | No drivable route between the two places |
-| `upstream_error` | 502 | A routing, geocoding or weather service failed |
+| `upstream_error` | 502 | A routing, geocoding or weather service failed; `retry_after` is set when a quick retry should work |
 | `rate_limited` | 503 | The free weather quota is used up; `retry_after` says when to retry, if waiting helps |
 | `throttled` | 429 | Too many plans from this client |
 | `server_error` | 500 | Anything unexpected (logged on the server) |
@@ -213,7 +231,7 @@ Code: [`simulation.py`](backend/planner/services/simulation.py).
 
 ## Tests
 
-`make test` runs the backend suite (95 tests) in about a second, with no
+`make test` runs the backend suite (107 tests) in about a second, with no
 network access:
 
 - `test_risk.py`: every band edge for wind, rain and snow; each load rule on both sides of its weight limit
@@ -225,7 +243,7 @@ network access:
 - `test_routing.py`: duplicate removal, via-point fill, detour rejection, provider fallback, response parsing
 - `test_simulation.py`: storm drill placement in space and time, rain vs snow
 - `test_geo.py`: distances, polyline decoding, interpolation, line simplification
-- `test_http.py`: outbound error messages keep only readable text from third-party responses
+- `test_http.py`: outbound error messages keep only readable text from third-party responses; an outage on the weather proxy falls back to Open-Meteo, while rate limits and bad requests are not retried
 - `test_api.py`: full plan through the HTTP API, including "a storm that arrives after the truck has passed doesn't count", load changing the level, closed routes and wait times, every error code, the health check and out-of-range dates
 
 ## Known limits

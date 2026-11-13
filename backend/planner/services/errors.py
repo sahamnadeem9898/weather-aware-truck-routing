@@ -24,15 +24,26 @@ class InvalidTrip(PlannerError):
 
 
 class UpstreamError(PlannerError):
-    """A third-party API failed, timed out or rate limited us."""
+    """A third-party API failed, timed out or rate limited us.
+
+    `retry_after` (seconds) is set when trying again soon is likely to work;
+    the app then retries once on its own.
+    """
 
     code = "upstream_error"
     status = 502
 
-    def __init__(self, service: str, message: str, http_status: int | None = None):
+    def __init__(
+        self,
+        service: str,
+        message: str,
+        http_status: int | None = None,
+        retry_after: int | None = None,
+    ):
         super().__init__(message)
         self.service = service
         self.http_status = http_status
+        self.retry_after = retry_after
 
 
 class RateLimited(UpstreamError):
@@ -42,5 +53,4 @@ class RateLimited(UpstreamError):
     status = 503
 
     def __init__(self, service: str, message: str, retry_after: int | None = None):
-        super().__init__(service, message, http_status=429)
-        self.retry_after = retry_after
+        super().__init__(service, message, http_status=429, retry_after=retry_after)

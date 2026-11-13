@@ -18,7 +18,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from .errors import RateLimited, UpstreamError
-from .http import request_json
+from .http import Timeout, is_transient, request_json_failover
 
 Cell = tuple[float, float]  # (lat, lon), rounded to CELL_DECIMALS
 HourlyValues = tuple[float, float | None, float, float]  # wind, gust, rain, snow
@@ -30,6 +30,11 @@ HOURLY_FIELDS = "wind_speed_10m,wind_gusts_10m,rain,showers,snowfall"
 # Open-Meteo's free tier counts every location as one call, with per-minute,
 # per-hour and per-day caps. Only the per-minute one is worth waiting out.
 MINUTE_LIMIT_RETRY_SECONDS = 60
+# A failed connection or a 5xx is usually gone a few seconds later.
+TRANSIENT_RETRY_SECONDS = 5
+# A healthy server accepts a connection in well under a second; waiting much
+# longer only delays trying the fallback.
+CONNECT_TIMEOUT = 5.0
 
 
 @dataclass(frozen=True)
@@ -177,7 +182,7 @@ def _fetch(cells: list[Cell], days: list[date]) -> list[dict[int, HourlyValues]]
             "start_date": days[0].isoformat(),
             "end_date": days[-1].isoformat(),
         },
-        timeout=40.0,
+        timeout=(CONNECT_TIMEOUT, 15.0),
     )
     locations = data if isinstance(data, list) else [data]
     if len(locations) != len(cells):
@@ -185,17 +190,24 @@ def _fetch(cells: list[Cell], days: list[date]) -> list[dict[int, HourlyValues]]
     return [_parse_hourly(location["hourly"]) for location in locations]
 
 
-def _open_meteo(params: dict, timeout: float = 25.0):
+def _open_meteo(params: dict, timeout: Timeout = (CONNECT_TIMEOUT, 10.0)):
     """Call the forecast API, turning its errors into messages a driver can act on."""
     try:
-        return request_json(
+        return request_json_failover(
             "weather",
-            "GET",
-            f"{settings.OPEN_METEO_URL}/v1/forecast",
+            (settings.OPEN_METEO_URL, settings.OPEN_METEO_PUBLIC_URL),
+            "/v1/forecast",
             params=params,
             timeout=timeout,
         )
     except UpstreamError as exc:
+        if is_transient(exc):
+            raise UpstreamError(
+                "weather",
+                "The weather service is not responding right now. Trying again usually works.",
+                http_status=exc.http_status,
+                retry_after=TRANSIENT_RETRY_SECONDS,
+            ) from exc
         if exc.http_status == 429:
             if "minut" in str(exc).lower():
                 raise RateLimited(

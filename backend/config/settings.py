@@ -126,12 +126,13 @@ LOGGING = {
 # --- Third-party services (all free and keyless) ---------------------------
 VALHALLA_URL = env_url("VALHALLA_URL", "https://valhalla1.openstreetmap.de")
 OSRM_URL = env_url("OSRM_URL", "https://router.project-osrm.org")
-# Open-Meteo, or the Cloudflare Worker in deploy/ that forwards to it. Both
-# serve /v1/forecast and /v1/search from the root, so only the origin is kept.
-OPEN_METEO_URL = env_origin("OPEN_METEO_URL", "https://api.open-meteo.com")
-OPEN_METEO_GEOCODING_URL = env_origin(
-    "OPEN_METEO_GEOCODING_URL", "https://geocoding-api.open-meteo.com"
-)
+# Open-Meteo's public endpoints. The two settings below may point at the
+# Cloudflare Worker in deploy/ instead; when that fails, these are the fallback.
+OPEN_METEO_PUBLIC_URL = "https://api.open-meteo.com"
+OPEN_METEO_GEOCODING_PUBLIC_URL = "https://geocoding-api.open-meteo.com"
+# Both serve /v1/forecast and /v1/search from the root, so only the origin is kept.
+OPEN_METEO_URL = env_origin("OPEN_METEO_URL", OPEN_METEO_PUBLIC_URL)
+OPEN_METEO_GEOCODING_URL = env_origin("OPEN_METEO_GEOCODING_URL", OPEN_METEO_GEOCODING_PUBLIC_URL)
 NOMINATIM_URL = env_url("NOMINATIM_URL", "https://nominatim.openstreetmap.org")
 HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "stormline-truck-routing-demo/1.0")
 

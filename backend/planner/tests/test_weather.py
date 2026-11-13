@@ -31,7 +31,7 @@ class WeatherTests(SimpleTestCase):
         cache.clear()
 
     def load(self, cells, response, hours=5):
-        with patch.object(weather, "request_json", return_value=response) as http:
+        with patch.object(weather, "request_json_failover", return_value=response) as http:
             forecast = weather.load_forecast(cells, MIDNIGHT, MIDNIGHT + timedelta(hours=hours))
         return forecast, http
 
@@ -83,17 +83,30 @@ class WeatherTests(SimpleTestCase):
 
     def test_minute_limit_says_how_long_to_wait(self):
         error = UpstreamError("weather", "Minutely API request limit exceeded.", http_status=429)
-        with patch.object(weather, "request_json", side_effect=error):
+        with patch.object(weather, "request_json_failover", side_effect=error):
             with self.assertRaisesMessage(RateLimited, "rate limiting") as caught:
                 weather.load_forecast([(35.0, -100.0)], MIDNIGHT, MIDNIGHT)
         self.assertEqual(caught.exception.retry_after, weather.MINUTE_LIMIT_RETRY_SECONDS)
 
     def test_daily_limit_is_not_worth_waiting_a_minute_for(self):
         error = UpstreamError("weather", "Daily API request limit exceeded.", http_status=429)
-        with patch.object(weather, "request_json", side_effect=error):
+        with patch.object(weather, "request_json_failover", side_effect=error):
             with self.assertRaises(RateLimited) as caught:
                 weather.load_forecast([(35.0, -100.0)], MIDNIGHT, MIDNIGHT)
         self.assertIsNone(caught.exception.retry_after)
+
+    def test_an_outage_says_trying_again_will_help(self):
+        error = UpstreamError("weather", "The weather service returned an error (525).", 525)
+        with patch.object(weather, "request_json_failover", side_effect=error):
+            with self.assertRaisesMessage(UpstreamError, "not responding") as caught:
+                weather.load_forecast([(35.0, -100.0)], MIDNIGHT, MIDNIGHT)
+        self.assertEqual(caught.exception.retry_after, weather.TRANSIENT_RETRY_SECONDS)
+
+    @override_settings(OPEN_METEO_URL="https://proxy.test")
+    def test_asks_the_proxy_first_and_open_meteo_as_the_fallback(self):
+        _, http = self.load([(35.0, -100.0)], open_meteo_location([5.0] * 24))
+        mirrors = http.call_args.args[1]
+        self.assertEqual(mirrors, ("https://proxy.test", "https://api.open-meteo.com"))
 
     def test_batches_that_arrived_are_kept_when_another_batch_fails(self):
         cells = [(35.0 + i / 10, -100.0) for i in range(weather.CELLS_PER_REQUEST + 1)]
@@ -105,12 +118,12 @@ class WeatherTests(SimpleTestCase):
                 raise limited
             return [open_meteo_location([5.0] * 24)] * len(batch)
 
-        with patch.object(weather, "request_json", side_effect=first_batch_only):
+        with patch.object(weather, "request_json_failover", side_effect=first_batch_only):
             with self.assertRaises(RateLimited):
                 weather.load_forecast(cells, MIDNIGHT, MIDNIGHT)
         # The retry asks only for the one cell that failed.
         retry = [open_meteo_location([5.0] * 24)]
-        with patch.object(weather, "request_json", return_value=retry) as http:
+        with patch.object(weather, "request_json_failover", return_value=retry) as http:
             weather.load_forecast(cells, MIDNIGHT, MIDNIGHT)
         self.assertEqual(http.call_count, 1)
         self.assertEqual(http.call_args.kwargs["params"]["latitude"], str(cells[-1][0]))

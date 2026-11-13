@@ -11,7 +11,7 @@ from rest_framework.views import exception_handler as drf_exception_handler
 
 from .serializers import PlanRequestSerializer
 from .services import geocoding
-from .services.errors import PlannerError, RateLimited
+from .services.errors import PlannerError, UpstreamError
 from .services.planner import TripRequest, plan_trip
 from .throttles import GlobalPlanThrottle
 
@@ -24,7 +24,7 @@ def exception_handler(exc: Exception, context: dict) -> Response:
         logger.warning("Planner error (%s): %s", exc.code, exc)
         body = {"code": exc.code, "detail": str(exc)}
         headers = {}
-        if isinstance(exc, RateLimited) and exc.retry_after:
+        if isinstance(exc, UpstreamError) and exc.retry_after:
             body["retry_after"] = exc.retry_after
             headers["Retry-After"] = str(exc.retry_after)
         return Response(body, status=exc.status, headers=headers)
